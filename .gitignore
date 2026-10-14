@@ -1,0 +1,15 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+.DS_Store
+
+# Simulation outputs
+*.npz
+*.npy
+simulation.log
+tables34_30runs/
+barrier_30runs_fair/
+barrier_smoketest_fair/
