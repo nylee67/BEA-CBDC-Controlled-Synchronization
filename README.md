@@ -15,14 +15,17 @@ The experiments investigate (i) cutoff-based settlement synchronization over var
 | `run_bea_cbdc_tables34_30_simple.py` | Original three-AC-count, 30-run experiment retained for reproducing the earlier results. |
 | `bea_cbdc_basic_barrier_fair.py` | Engine containing the barrier-based simulation function `run_barrier_simulation()`. |
 | `run_bea_cbdc_barrier_30_fair.py` | Runs the barrier experiments for 70%, 80% and 90% participation thresholds (Table 8). |
-| `bea_cbdc_basic_barrier_table9_no_timeout.py` | Table 9 no-timeout barrier engine with temporary AC failures on the reference physical-time schedule. |
-| `run_bea_cbdc_table9_barrier_no_timeout.py` | Single-run Table 9 comparison at q = 0.7, 0.8, 0.9, without timeouts. |
-| `bea_cbdc_basic_barrier_table9_timeout.py` | Table 9 barrier engine with separate T0 and T2 timeouts. |
-| `run_bea_cbdc_table9_barrier_timeout.py` | Single-run Table 9 comparison at q = 0.7, 0.8, 0.9, with timeouts. |
-| `bea_cbdc_table10_barrier.py` | Table 10 barrier engine supporting recovery-aware waiting during long AC failures and optional stage-specific timeouts. |
-| `run_bea_cbdc_table10.py` | Seven single-run Table 10 comparisons with a common long-failure schedule: cutoff, three no-timeout barriers, and three timed barriers. |
+| `run_bea_cbdc_table9_t0_280_retry.py` | Table 9 runner: six barrier configurations (q = 0.7, 0.8, 0.9; with/without timeout). |
+| `bea_cbdc_table9_t0_280_retry_barrier.py` | Table 9 recovery-aware, two-stage barrier simulation engine. |
+| `bea_cbdc_table9_t0_280_retry_core.py` | Table 9 common simulation and destination-fair transaction-queue primitives. |
+| `table9_t0_280_retry_analysis.py` | Analysis functions imported by the Table 9 runner (invoke the runner, not this helper directly). |
+| `Table9_T0_280_Retry_Failure_Schedule_Input.csv` | Archived failure schedule used by the full Table 9 experiment. |
+| `run_bea_cbdc_table10_t0_280_retry.py` | Table 10 runner: cutoff plus six barrier configurations; original/extreme failure scenarios. |
+| `bea_cbdc_table10_t0_280_retry_cutoff.py` | Table 10 cutoff engine with the shared destination-fair queue policy. |
+| `bea_cbdc_table10_t0_280_retry_barrier.py` | Table 10 recovery-aware barrier engine with/without timeout. |
+| `table10_t0_280_retry_analysis.py` | Analysis functions imported by the Table 10 runner (invoke the runner, not this helper directly). |
 
-**Reproduction principle.** Tables 5, 6, and 7 use the *same* cutoff-based source file, `bea_cbdc_basic.py`, with only the indicated experiment parameters changed. No separate HalfAC, HalfEC, or temporary-failure implementation is required. Use the stated settings before each run and restore the baseline settings afterward. The updated 50-run wrapper is used for Tables 3 and 4; the original 30-run wrapper remains available for the earlier three-configuration results. The separate barrier wrapper reproduces Table 8. The dedicated Table 9 engines and wrappers evaluate the two barrier variants under the temporary-AC-failure scenario; these do not replace the Table 8 engine. The Table 10 wrapper and engine reuse the released Table 9 reference engine and analysis utilities and keep the long-failure scenario separate from Table 9.
+**Reproduction principle.** Tables 5, 6, and 7 use the *same* cutoff-based source file, `bea_cbdc_basic.py`, with only the indicated experiment parameters changed. No separate HalfAC, HalfEC, or temporary-failure implementation is required. Use the stated settings before each run and restore the baseline settings afterward. The updated 50-run wrapper is used for Tables 3 and 4; the original 30-run wrapper remains available for the earlier three-configuration results. The separate barrier wrapper reproduces Table 8. The Table 9 runner evaluates six barrier configurations using the archived temporary-AC-failure schedule; it does not rerun the Table 6 cutoff. The Table 10 runner separately evaluates one cutoff and six barrier configurations under a common, longer failure schedule. Both newer experiment families use destination-fair queues, whereas the original Table 6 cutoff implementation uses its original FIFO policy; results from these different queue policies must not be presented as a strictly queue-controlled comparison.
 
 ## Requirements
 
@@ -249,163 +252,124 @@ The barrier wrapper skips completed threshold/seed pairs from its existing resul
 
 ## Reproducing the barrier comparisons under temporary AC failures (Table 9)
 
-Table 9 compares no-timeout and timeout-equipped barriers under the temporary AC failure scenario described for Table 6 (Section 5.4). Each threshold `q = 0.7, 0.8, 0.9` is run **once** with `seed = 42`: this is a scenario-based comparison, **not** a ten-run confidence-interval experiment.
+Table 9 runs **six single-run barrier configurations**, with and without stage-specific timeouts at `q = 0.7, 0.8, 0.9`. All use seed 42. It does **not** run the time-based cutoff; the existing Table 6 result is the cutoff reference.
 
-Both Table 9 wrappers use the same full-scale configuration: `N_AC = 1000`, `N_User = 100_000_000`, a 1,000,000-ms transaction-generation horizon (`N_Round = 1000`, `Delta_R = 1000` ms), `lambda_tx = 100.0` requests/ms, no burst traffic, and `P_Fail_AC = 0.5`. Exactly 500 randomly selected ACs each experience one temporary failure; starts are selected within reference rounds 100-800 and durations within 20-100 reference rounds. **These failures are asynchronous, not 500 simultaneous failures.**
+**Required files** (all in the repository root):
 
-**Important timing detail:** since a barrier EC round has variable duration, the Table 9 engines interpret failure starts and ends on a *fixed physical-time reference grid* of 1,000-ms periods, rather than treating barrier-round indices as equivalent to the fixed-cutoff EC rounds. This preserves the intended Table 6 failure windows when comparing the variants.
+- `run_bea_cbdc_table9_t0_280_retry.py`
+- `bea_cbdc_table9_t0_280_retry_barrier.py`
+- `bea_cbdc_table9_t0_280_retry_core.py`
+- `table9_t0_280_retry_analysis.py`
+- `Table9_T0_280_Retry_Failure_Schedule_Input.csv`
 
-### Barrier without timeout
+Full-size settings: `N_AC = 1000`, `N_User = 100_000_000`, `N_Round = 1000`, `Delta_R = 1000` ms, `lambda_tx = 100.0` requests/ms, no burst traffic, and seed 42. The archived CSV supplies exactly 500 ACs, each with one temporary failure starting in reference seconds 100-800 and lasting 20-100 seconds. The failures are placed on a **fixed physical-time grid**, independent of the variable-length barrier EC rounds. The full-size runner requires the archived CSV; it must not be omitted or replaced with a newly generated schedule.
 
-Use the matching engine `bea_cbdc_basic_barrier_table9_no_timeout.py`. Stage 1 waits for `ceil(q * N_AC)` settlement-request reports; stage 2 waits for `ceil(q * N_report)` readiness reports, with `N_report` the number admitted in stage 1. No timeout is inserted. If the threshold cannot be reached, the simulator records a **STALLED** status rather than silently advancing the round.
+### Table 9 barrier rules
 
-```bash
-python run_bea_cbdc_table9_barrier_no_timeout.py
-```
+The first-stage quorum is `ceil(q * N_AC)`. The second-stage readiness quorum is `ceil(q * N_T0)`, where `N_T0` is the number of ACs admitted at T0 in that EC round. No-timeout variants wait for the required reports, including reports after temporary AC recovery. With timeouts, each stage closes at its quorum or at its separate deadline, whichever comes first:
 
-To run only one threshold, for example:
-
-```bash
-python run_bea_cbdc_table9_barrier_no_timeout.py --q 0.9
-```
-
-Outputs in `table9_barrier_no_timeout/`:
-
-- `Table9_Barrier_NoTimeout.csv`: per-threshold summary, including completed-request latency, throughput, backlog, unfinished requests, and stall status.
-- `Table9_Barrier_Rounds_q0.7.csv`, `Table9_Barrier_Rounds_q0.8.csv`, `Table9_Barrier_Rounds_q0.9.csv`: per-round metrics for completed simulations.
-- `Table9_Failure_Schedule.csv`: the reference failure windows in both reference-round and physical-time units.
-
-### Barrier with independent T0/T2 timeouts
-
-Use the matching engine `bea_cbdc_basic_barrier_table9_timeout.py`. Each stage advances when its quorum is reached **or** its own timeout expires, whichever happens first. Timeout values are fixed in advance for each threshold:
-
-| Barrier threshold | T0 settlement-request timeout | T2 readiness-report timeout |
+| Threshold | T0 timeout, relative to round opening | T2 timeout, relative to T1 |
 | ---: | ---: | ---: |
-| `q = 0.7` | 10 ms | 443 ms |
-| `q = 0.8` | 20 ms | 510 ms |
-| `q = 0.9` | 100 ms | 616 ms |
+| `q = 0.7` | 280 ms | 443 ms |
+| `q = 0.8` | 280 ms | 510 ms |
+| `q = 0.9` | 280 ms | 616 ms |
 
-The first-stage values are empirically chosen from the baseline report-wait means of 0.00, 0.78 and 65.01 ms; the second-stage values are the corresponding baseline readiness-wait means of 295.17, 339.49 and 410.59 ms multiplied by 1.5 and rounded up to integer milliseconds. **The timeouts apply separately at T0 and T2**, not as one overall EC-round deadline. They are not re-optimized for the failure scenario.
+After a prepared T0 report misses the stage deadline, its AC may restart only after receiving the preliminary matrix announcement at `t2` (T1 plus communication delay). These variants use destination-fair, round-robin transaction queues.
 
-```bash
-python run_bea_cbdc_table9_barrier_timeout.py
-```
+### Run Table 9
 
-To run only one threshold:
+List planned configurations without running them:
 
 ```bash
-python run_bea_cbdc_table9_barrier_timeout.py --q 0.9
+python -u run_bea_cbdc_table9_t0_280_retry.py --list
 ```
 
-Outputs in `table9_barrier_timeout/`:
-
-- `Table9_Barrier_Timeout.csv`: per-threshold summary including T0 and T2 timeout counts.
-- `Table9_Barrier_Timeout_Rounds_q0.7.csv`, `Table9_Barrier_Timeout_Rounds_q0.8.csv`, `Table9_Barrier_Timeout_Rounds_q0.9.csv`: per-round timing, participation and backlog statistics.
-- `Table9_Failure_Schedule.csv`: physical-time-referenced failure windows.
-
-### Execution and interpretation notes
-
-The two scripts require their **own matching engine files**, all four Python files must be in the same directory, and neither experiment changes the original Table 8 outputs. To test functionality without full-scale transaction generation:
+Run all six full-size barrier variants sequentially:
 
 ```bash
-python run_bea_cbdc_table9_barrier_no_timeout.py --smoke-test
-python run_bea_cbdc_table9_barrier_timeout.py --smoke-test
+python -u run_bea_cbdc_table9_t0_280_retry.py
 ```
 
-The smoke-test results are saved separately in `table9_barrier_no_timeout_smoke/` and `table9_barrier_timeout_smoke/`; they are not manuscript results. Both wrappers accept `--q` to select a threshold, `--reset` to rerun already completed thresholds, and `--progress-every` to adjust progress logging. Successful configurations are skipped on subsequent runs unless `--reset` is specified.
-
-These tests illustrate protocol behavior for **specified failure schedules** rather than estimating population-level performance across repeated seeds. Mean latency is computed only for completed transactions; unfinished request counts and barrier stalls must be considered separately. For cutoff-versus-barrier comparisons, use the same simulated-time observation horizon and distinguish physical-time throughput from throughput per variable-length EC round.
-
-## Reproducing the long-duration AC failure comparison (Table 10)
-
-Table 10 evaluates **seven single-run configurations** under a common severe, long-duration AC failure schedule. The intent is to examine settlement progression, reporting waits and operational consequences when substantial numbers of ACs are temporarily unavailable. These runs are **scenario demonstrations (seed 42), not repeated-seed confidence-interval estimates**.
-
-### Required files and configuration
-
-Place these **four Python files in the same directory** (all are included in this repository):
-
-- `run_bea_cbdc_table10.py`: new Table 10 experiment runner.
-- `bea_cbdc_table10_barrier.py`: new recovery-aware Table 10 barrier engine.
-- `bea_cbdc_basic_barrier_table9_no_timeout.py`: unchanged Table 9 reference engine; used for the original cutoff processing and transaction helpers.
-- `run_bea_cbdc_table9_barrier_no_timeout.py`: unchanged Table 9 analysis helpers.
-
-The runner loads these dependencies directly. **The separate `bea_cbdc_basic_barrier_table9_timeout.py` file is not required by this Table 10 runner.** Existing Table 9 source files and results are not modified.
-
-The full-size Table 10 configuration is:
-
-| Parameter | Value | Interpretation |
-| --- | ---: | --- |
-| `N_AC` | `1000` | Total ACs |
-| `N_User` | `100_000_000` | Synthetic user accounts |
-| `N_Round` | `1000` | 1,000 reference time periods |
-| `Delta_R` | `1000` ms | One reference second per period |
-| `lambda_tx` | `100.0` | System-wide requests/ms |
-| `Flag_Burst` | `False` | No traffic burst |
-| `P_Fail_AC` | `0.5` | Exactly 500 ACs selected to fail once |
-| `R_Fail_Start` / `R_Fail_End` | `100` / `500` | Failure starts in reference seconds 100-500 |
-| `Min_Fail_Duration` / `Max_Fail_Duration` | `100` / `400` | Each failure lasts 100-400 seconds |
-| `seed` | `42` | Reproducible scenario |
-
-Every selected AC fails **once**, with its own randomly generated start and duration. The same deterministic failure schedule and synthetic transaction workload are regenerated for each configuration. Failure windows are tied to **absolute simulated physical time**, not to the varying EC round indices of the barriers. There is no assumption that all 500 selected ACs fail simultaneously.
-
-### Seven configurations
-
-| Mode (`--mode`) | Threshold | Stage 1 (T0) timeout | Stage 2 (T2) timeout |
-| --- | ---: | ---: | ---: |
-| `cutoff` | — | Reference time-based cutoff | Reference time-based cutoff |
-| `barrier` | `0.7` | None | None |
-| `barrier` | `0.8` | None | None |
-| `barrier` | `0.9` | None | None |
-| `timeout` | `0.7` | 10 ms | 443 ms |
-| `timeout` | `0.8` | 20 ms | 510 ms |
-| `timeout` | `0.9` | 100 ms | 616 ms |
-
-The time-based cutoff run uses the original cutoff simulation logic. The no-timeout barrier does **not** terminate immediately when a quorum becomes temporarily unavailable: it waits for AC recovery and subsequently arriving reports. If a pending stage does not finish within the shared observation horizon, the output distinguishes `BLOCKED_AT_HORIZON` from `OBSERVATION_END`; neither should be interpreted automatically as permanent deadlock. With timeouts, each reporting stage proceeds when its quorum is reached or its independent timeout expires, whichever is earlier. The six barrier variants use the same q thresholds and stage-specific timeout values as Table 9.
-
-### Running Table 10
-
-List the seven planned runs without simulating:
+Run only the timed barrier with `q = 0.9`:
 
 ```bash
-python3 run_bea_cbdc_table10.py --list
+python -u run_bea_cbdc_table9_t0_280_retry.py --mode timeout --q 0.9
 ```
 
-Full experiment, all seven runs **sequentially**:
+Optional reduced-size functional test (not a paper result):
 
 ```bash
-python3 run_bea_cbdc_table10.py
+python -u run_bea_cbdc_table9_t0_280_retry.py --smoke-test
 ```
 
-Run a selected configuration:
+Use `--reset` to recompute already recorded configurations, `--progress-every N` to change progress reports, or `--audit-retries` to write T0 retry timelines. Without `--reset`, completed/terminal-status runs recorded in the matching output folder are skipped.
+
+**Outputs:** `table9_t0_280_retry_barrier_6runs/` (smoke-test: `table9_t0_280_retry_barrier_6runs_smoke/`). The main summary is `Table9_T0_280_Retry_Barrier_All_6.csv`. The directory also includes `Table9_T0_280_Retry_Scenario.json`, the generated failure-schedule and concurrent-failure CSVs, and `Table9_T0_280_Retry_{barrier|timeout}_Rounds_q*.csv`.
+
+**Comparison limitation:** The newly released Table 9 barriers use destination-fair scheduling, while the original Table 6 cutoff result uses FIFO. This distinction can affect latency and backlog. Do not claim that Table 6 vs. Table 9 isolates synchronization choice alone while the queue policies differ. Every Table 9 result is one simulated scenario, not a confidence-interval estimate.
+
+## Reproducing severe AC failure comparisons (Table 10)
+
+Table 10 runs **seven single-run configurations** under the same failure schedule and transaction-generation settings within a given scenario: one time-based cutoff, three no-timeout barriers, and three barriers with timeouts. The cutoff and all barriers use the **same destination-fair transaction-queue policy**, allowing an internally consistent Table 10 comparison.
+
+**Required files** (all in the repository root):
+
+- `run_bea_cbdc_table10_t0_280_retry.py`
+- `bea_cbdc_table10_t0_280_retry_cutoff.py`
+- `bea_cbdc_table10_t0_280_retry_barrier.py`
+- `table10_t0_280_retry_analysis.py`
+
+Full-size settings: `N_AC = 1000`, `N_User = 100_000_000`, `N_Round = 1000`, `Delta_R = 1000` ms, `lambda_tx = 100.0` requests/ms, 500 ACs selected to fail once, no burst traffic, and seed 42. The Table 10 runner generates its failure schedule deterministically; **no input failure CSV is required**.
+
+Two failure scenarios are supported:
+
+| `--scenario` | Failure start (reference seconds) | Failure duration (seconds) |
+| --- | ---: | ---: |
+| `extreme` (default) | 100-300 | 300-600 |
+| `original` | 100-500 | 100-400 |
+
+Under `extreme`, all 500 selected ACs are unavailable concurrently during reference seconds 300-399. No-timeout barriers continue waiting for recovery and eventual quorum rather than applying an undisclosed timeout. An uncompleted stage at the 1,000,000-ms observation horizon is recorded with an appropriate noncompleted status, not treated as a completed settlement round.
+
+The T0 quorum is `ceil(q * N_AC)`; the T2 readiness quorum is `ceil(q * N_T0)`. The timed barriers use **(T0, T2) = (280, 443), (280, 510), (280, 616) ms** for `q = 0.7, 0.8, 0.9`, respectively. Prepared T0 reports that miss the deadline are retried after T1 announcement reception at `t2`, not merely when T1 occurs. All Table 10 modes use the same queue discipline.
+
+### Run Table 10
+
+List planned runs:
 
 ```bash
-python3 run_bea_cbdc_table10.py --mode cutoff
-python3 run_bea_cbdc_table10.py --mode barrier --q 0.9
-python3 run_bea_cbdc_table10.py --mode timeout --q 0.9
+python -u run_bea_cbdc_table10_t0_280_retry.py --scenario extreme --list
 ```
 
-Functional smoke test (reduced-size scenario, **not** a manuscript result):
+Run all seven variants in the extreme scenario (full experiment):
 
 ```bash
-python3 run_bea_cbdc_table10.py --smoke-test
+python -u run_bea_cbdc_table10_t0_280_retry.py --scenario extreme
 ```
 
-Options: `--mode all|cutoff|barrier|timeout` (default `all`), `--q 0.7|0.8|0.9` for the barrier modes, `--progress-every N`, and `--reset` to repeat selected runs. The runner saves each finished result immediately and skips completed/previously recorded terminal-status configurations on subsequent runs, unless `--reset` is specified.
+Run only time-based cutoff and timed barrier `q = 0.9` (two-run comparison):
 
-### Output files and interpretation
+```bash
+python -u run_bea_cbdc_table10_t0_280_retry.py --scenario extreme --pair
+```
 
-The full experiment writes to `table10_long_failure/`; the smoke test writes to `table10_long_failure_smoke/`.
+Run just the six barrier variants, or select one configuration:
 
-- `Table10_All_7.csv`: the seven-configuration summary, including completion status, throughput, latency, backlog, unfinished transactions, and monetary deviation.
-- `Table10_Scenario.json`: parameters and a SHA-256 fingerprint of the shared failure schedule, used to detect scenario mismatches when resuming.
-- `Table10_Failure_Schedule.csv`: per-AC failure start/end times and durations.
-- `Table10_Concurrent_Failures.csv`: concurrent unavailable AC count for each reference second.
-- `Table10_Cutoff_Rounds.csv`: reference cutoff round metrics.
-- `Table10_barrier_Rounds_q0.7.csv`, `Table10_barrier_Rounds_q0.8.csv`, `Table10_barrier_Rounds_q0.9.csv`: no-timeout barrier round metrics.
-- `Table10_timeout_Rounds_q0.7.csv`, `Table10_timeout_Rounds_q0.8.csv`, `Table10_timeout_Rounds_q0.9.csv`: timed barrier round metrics.
-- `Table10_Cutoff_Console.log`: console log of the cutoff run, created inside the output directory.
+```bash
+python -u run_bea_cbdc_table10_t0_280_retry.py --scenario extreme --barriers-only
+python -u run_bea_cbdc_table10_t0_280_retry.py --scenario extreme --mode timeout --q 0.9
+```
 
-Do **not** treat a mean latency calculated over completed transactions as evidence that uncompleted requests experienced no delay. Interpret incomplete requests, quorum waits and censored settlement rounds together with measured throughput and backlog. The common physical-time observation window is important because barrier EC rounds are variable-length. The resulting values are simulation outcomes for the specified failure scenario, not universal performance guarantees.
+Optional reduced-size functional test (not a paper result):
+
+```bash
+python -u run_bea_cbdc_table10_t0_280_retry.py --scenario extreme --smoke-test
+```
+
+Use `--scenario original` for the alternate long-failure scenario. `--reset`, `--progress-every N`, and `--audit-retries` are also supported. The `--pair` option cannot be combined with `--mode`, `--q`, or `--barriers-only`. Already recorded completed/terminal-status runs are skipped unless `--reset` is supplied.
+
+**Outputs:** `table10_t0_280_retry_extreme/` (or `table10_t0_280_retry_original/`; smoke variants append `_smoke`). The main summary is `Table10_T0_280_Retry_All_7.csv`, even if only a subset of configurations was run. Additional outputs include `Table10_T0_280_Retry_Scenario.json`, the failure schedule and concurrent-failure CSVs, `Table10_T0_280_Retry_Cutoff_Rounds.csv`, per-barrier round CSVs and the cutoff console log.
+
+Interpret completed-request mean latency together with unfinished requests, backlog, throughput, barrier waiting time, and incomplete-stage status. These simulations demonstrate a specified scenario rather than a statistically averaged or production-system performance guarantee.
 
 ## Evaluation and reproducibility notes
 
@@ -419,7 +383,7 @@ Do **not** treat a mean latency calculated over completed transactions as eviden
 
 ## Outputs, privacy, and version control
 
-Large generated arrays and logs are excluded through `.gitignore`. The generated output folders `tables34_30runs/`, `tables34_50runs/`, `barrier_30runs_fair/`, `table9_barrier_no_timeout/`, `table9_barrier_timeout/`, and `table10_long_failure/` (along with their applicable smoke-test counterparts) are ignored so large simulation results and CSV outputs are not committed accidentally. No actual user account data or credentials are included; the model generates synthetic users and transactions.
+Large generated arrays (`*.npz`, `*.npy`) and the legacy output directories are excluded through `.gitignore`. The new Table 9 and Table 10 runners write into `table9_t0_280_retry_barrier_6runs*/` and `table10_t0_280_retry_*/`; ensure these generated directories are excluded before committing, since the current `.gitignore` may not yet cover them. Do not commit generated result CSVs, logs or other large outputs. The checked-in `Table9_T0_280_Retry_Failure_Schedule_Input.csv` is an intentional, required small input file, not a generated result. No actual user account data or credentials are included; the model generates synthetic users and transactions.
 
 ## Citation and usage rights
 
