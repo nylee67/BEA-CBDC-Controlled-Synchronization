@@ -11,11 +11,12 @@ The experiments investigate (i) cutoff-based settlement synchronization over var
 | File | Purpose |
 | --- | --- |
 | `bea_cbdc_basic.py` | Reference cutoff-based controlled synchronization simulation engine. It can be executed directly after modifying the `Config` settings and, for the burst flag, the `__main__` block. |
-| `run_bea_cbdc_tables34_30_simple.py` | Baseline/scalability repetition for manuscript Tables 3 and 4. |
+| `run_bea_cbdc_tables34_50_simple.py` | Updated baseline/AC-population experiment for manuscript Tables 3 and 4: five AC counts and ten seeds (50 runs). |
+| `run_bea_cbdc_tables34_30_simple.py` | Original three-AC-count, 30-run experiment retained for reproducing the earlier results. |
 | `bea_cbdc_basic_barrier_fair.py` | Engine containing the barrier-based simulation function `run_barrier_simulation()`. |
 | `run_bea_cbdc_barrier_30_fair.py` | Runs the barrier experiments for 70%, 80% and 90% participation thresholds (Table 8). |
 
-**Reproduction principle.** Tables 5, 6, and 7 use the *same* cutoff-based source file, `bea_cbdc_basic.py`, with only the indicated experiment parameters changed. No separate HalfAC, HalfEC, or temporary-failure implementation is required. Use the stated settings before each run and restore the baseline settings afterward. The two existing wrappers are retained for the repeated-run results of Tables 3, 4, and 8.
+**Reproduction principle.** Tables 5, 6, and 7 use the *same* cutoff-based source file, `bea_cbdc_basic.py`, with only the indicated experiment parameters changed. No separate HalfAC, HalfEC, or temporary-failure implementation is required. Use the stated settings before each run and restore the baseline settings afterward. The updated 50-run wrapper is used for Tables 3 and 4; the original 30-run wrapper remains available for the earlier three-configuration results. The separate barrier wrapper reproduces Table 8.
 
 ## Requirements
 
@@ -31,19 +32,43 @@ Full-scale experiments are memory- and CPU-intensive. Use a machine with suffici
 
 ## Reproducing baseline and scalability experiments (Tables 3 and 4)
 
+**Current experiment (five AC configurations, 50 runs):**
+
+```bash
+python run_bea_cbdc_tables34_50_simple.py
+```
+
+The wrapper runs `N_AC = 1000, 500, 100, 50, 25` with ten independent pseudorandom seeds (42-51) for each configuration, giving **50 runs in total**. It uses the unchanged cutoff-based engine, `bea_cbdc_basic.py`, located in the same directory. Default settings include a **fixed population of 100 million simulated user accounts**, 1,000 EC rounds of 1,000 ms each, a system-wide arrival rate of 100 transfer requests/ms, and a nominal limit of 4,000 transactions per AC local synchronization round. For every run, the wrapper disables burst traffic (`Flag_Burst = False`) and temporary AC failures (`P_Fail_AC = 0`).
+
+The experiment varies the **number of access chains**, not the number of user accounts. Holding total traffic fixed while decreasing the number of ACs increases the average incoming load assigned to each AC:
+
+| `N_AC` | Mean requests per AC per 1,000 ms | Ratio to the nominal 4,000-transaction local-round capacity |
+| ---: | ---: | ---: |
+| 1000 | 100 | 2.5% |
+| 500 | 200 | 5% |
+| 100 | 1,000 | 25% |
+| 50 | 2,000 | 50% |
+| 25 | 4,000 | 100% |
+
+**Interpretation:** these are average arrival loads over 1,000 ms and nominal capacity ratios, not guarantees of completed transactions per EC round. ACs maintain independent local rounds and may carry unsettled transactions across EC rounds. The added 50- and 25-AC configurations are intended to examine behavior as per-AC demand approaches the configured local processing capacity.
+
+The wrapper collects run statistics in memory without saving large intermediate NPZ files and prints progress every 100 EC rounds. The baseline summary (Table 3) continues to use **`N_AC = 1000`**. Table 4 includes all five AC configurations and reports averages and 95% Student-t confidence intervals across the ten seeds for each configuration.
+
+Outputs in `tables34_50runs/`:
+
+- `all_50_runs.csv`: per-seed statistics, updated after each completed run.
+- `Table3_10runs.csv`: 1,000-AC baseline metrics with 95% confidence intervals.
+- `Table4_10runs.csv`: five-configuration comparison of backlog per AC, total backlog, transaction latency, and pending CBDC, each with 95% confidence intervals.
+
+**Original experiment (three AC configurations, 30 runs):** the prior wrapper is retained for reproducing the earlier results:
+
 ```bash
 python run_bea_cbdc_tables34_30_simple.py
 ```
 
-The wrapper runs `N_AC = 1000, 500, 100` with ten pseudorandom seeds, 42-51, for 30 runs total. Default simulation settings are declared in the reference engine, including 100 million user accounts, 1,000 nominal EC rounds, and `Delta_R = 1000 ms`. The wrapper sets `Flag_Burst = False` and `P_Fail_AC = 0` for each run. It captures arrays in memory to avoid writing large intermediate NPZ files and prints progress every 100 EC rounds.
+It runs `N_AC = 1000, 500, 100` with the same ten seeds and writes `all_30_runs.csv`, `Table3_10runs.csv`, and `Table4_10runs.csv` to `tables34_30runs/`.
 
-Outputs in `tables34_30runs/`:
-
-- `all_30_runs.csv`: per-seed statistics, written after each completed run.
-- `Table3_10runs.csv`: aggregated baseline metrics and 95% Student-t confidence intervals.
-- `Table4_10runs.csv`: per-AC-count metrics and 95% Student-t confidence intervals.
-
-**Restart note:** this baseline wrapper does not resume from an existing CSV; restarting it overwrites the results.
+**Restart note:** neither wrapper resumes from an existing results CSV. Restarting a wrapper starts from the first configuration/seed and overwrites its own output files. The two wrappers use separate output directories and do not overwrite each other's results.
 
 ## Reproducing the burst-traffic experiment (Table 5)
 
@@ -223,11 +248,12 @@ The barrier wrapper skips completed threshold/seed pairs from its existing resul
 - Standard statistical analysis in the paper excludes rounds 0-9 and 990-999 of a 1,000-round experiment. For a 2,000-round timing variant, check the corresponding observation window in physical time and the analysis being reproduced; do not accidentally compare unequal observation horizons.
 - Cutoff and barrier results must use comparable simulated-time horizons. `Throughput per EC Round` cannot be directly compared if EC round durations vary.
 - Transaction latency is measured from request timestamp to completion timestamp for transactions **requested within** the selected observation window and eventually completed, even when completion occurs after that window. Uncompleted transactions must not be silently counted as zero-latency completions.
+- The 100 million simulated user accounts are held fixed in the AC-population experiments; these experiments do **not** measure scalability as the number of user accounts changes.
 - Simulation results are stochastic and depend on random seeds and model assumptions. They are architectural-model results, not production CBDC performance benchmarks.
 
 ## Outputs, privacy, and version control
 
-Large generated arrays, logs, and result folders are excluded through `.gitignore`. No actual user account data or credentials are included; the model generates synthetic users and transactions.
+Large generated arrays and logs are excluded through `.gitignore`. The existing output folders `tables34_30runs/` and `barrier_30runs_fair/` are ignored; **add `tables34_50runs/` to `.gitignore`** before staging new results so that the additional CSV outputs are also excluded. No actual user account data or credentials are included; the model generates synthetic users and transactions.
 
 ## Citation and usage rights
 
