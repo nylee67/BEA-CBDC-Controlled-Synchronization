@@ -20,3 +20,7 @@ table9_barrier_timeout/
 table9_barrier_timeout_smoke/
 table10_long_failure/
 table10_long_failure_smoke/
+
+# Table 9 and Table 10 current experiment output folders
+table9_t0_280_retry_barrier_6runs*/
+table10_t0_280_retry_*/
