@@ -15,8 +15,12 @@ The experiments investigate (i) cutoff-based settlement synchronization over var
 | `run_bea_cbdc_tables34_30_simple.py` | Original three-AC-count, 30-run experiment retained for reproducing the earlier results. |
 | `bea_cbdc_basic_barrier_fair.py` | Engine containing the barrier-based simulation function `run_barrier_simulation()`. |
 | `run_bea_cbdc_barrier_30_fair.py` | Runs the barrier experiments for 70%, 80% and 90% participation thresholds (Table 8). |
+| `bea_cbdc_basic_barrier_table9_no_timeout.py` | Table 9 no-timeout barrier engine with temporary AC failures on the reference physical-time schedule. |
+| `run_bea_cbdc_table9_barrier_no_timeout.py` | Single-run Table 9 comparison at q = 0.7, 0.8, 0.9, without timeouts. |
+| `bea_cbdc_basic_barrier_table9_timeout.py` | Table 9 barrier engine with separate T0 and T2 timeouts. |
+| `run_bea_cbdc_table9_barrier_timeout.py` | Single-run Table 9 comparison at q = 0.7, 0.8, 0.9, with timeouts. |
 
-**Reproduction principle.** Tables 5, 6, and 7 use the *same* cutoff-based source file, `bea_cbdc_basic.py`, with only the indicated experiment parameters changed. No separate HalfAC, HalfEC, or temporary-failure implementation is required. Use the stated settings before each run and restore the baseline settings afterward. The updated 50-run wrapper is used for Tables 3 and 4; the original 30-run wrapper remains available for the earlier three-configuration results. The separate barrier wrapper reproduces Table 8.
+**Reproduction principle.** Tables 5, 6, and 7 use the *same* cutoff-based source file, `bea_cbdc_basic.py`, with only the indicated experiment parameters changed. No separate HalfAC, HalfEC, or temporary-failure implementation is required. Use the stated settings before each run and restore the baseline settings afterward. The updated 50-run wrapper is used for Tables 3 and 4; the original 30-run wrapper remains available for the earlier three-configuration results. The separate barrier wrapper reproduces Table 8. The dedicated Table 9 engines and wrappers evaluate the two barrier variants under the temporary-AC-failure scenario; these do not replace the Table 8 engine.
 
 ## Requirements
 
@@ -241,6 +245,75 @@ Outputs in `barrier_30runs_fair/`:
 
 The barrier wrapper skips completed threshold/seed pairs from its existing results CSV unless `--reset` is used.
 
+## Reproducing the barrier comparisons under temporary AC failures (Table 9)
+
+Table 9 compares no-timeout and timeout-equipped barriers under the temporary AC failure scenario described for Table 6 (Section 5.4). Each threshold `q = 0.7, 0.8, 0.9` is run **once** with `seed = 42`: this is a scenario-based comparison, **not** a ten-run confidence-interval experiment.
+
+Both Table 9 wrappers use the same full-scale configuration: `N_AC = 1000`, `N_User = 100_000_000`, a 1,000,000-ms transaction-generation horizon (`N_Round = 1000`, `Delta_R = 1000` ms), `lambda_tx = 100.0` requests/ms, no burst traffic, and `P_Fail_AC = 0.5`. Exactly 500 randomly selected ACs each experience one temporary failure; starts are selected within reference rounds 100-800 and durations within 20-100 reference rounds. **These failures are asynchronous, not 500 simultaneous failures.**
+
+**Important timing detail:** since a barrier EC round has variable duration, the Table 9 engines interpret failure starts and ends on a *fixed physical-time reference grid* of 1,000-ms periods, rather than treating barrier-round indices as equivalent to the fixed-cutoff EC rounds. This preserves the intended Table 6 failure windows when comparing the variants.
+
+### Barrier without timeout
+
+Use the matching engine `bea_cbdc_basic_barrier_table9_no_timeout.py`. Stage 1 waits for `ceil(q * N_AC)` settlement-request reports; stage 2 waits for `ceil(q * N_report)` readiness reports, with `N_report` the number admitted in stage 1. No timeout is inserted. If the threshold cannot be reached, the simulator records a **STALLED** status rather than silently advancing the round.
+
+```bash
+python run_bea_cbdc_table9_barrier_no_timeout.py
+```
+
+To run only one threshold, for example:
+
+```bash
+python run_bea_cbdc_table9_barrier_no_timeout.py --q 0.9
+```
+
+Outputs in `table9_barrier_no_timeout/`:
+
+- `Table9_Barrier_NoTimeout.csv`: per-threshold summary, including completed-request latency, throughput, backlog, unfinished requests, and stall status.
+- `Table9_Barrier_Rounds_q0.7.csv`, `Table9_Barrier_Rounds_q0.8.csv`, `Table9_Barrier_Rounds_q0.9.csv`: per-round metrics for completed simulations.
+- `Table9_Failure_Schedule.csv`: the reference failure windows in both reference-round and physical-time units.
+
+### Barrier with independent T0/T2 timeouts
+
+Use the matching engine `bea_cbdc_basic_barrier_table9_timeout.py`. Each stage advances when its quorum is reached **or** its own timeout expires, whichever happens first. Timeout values are fixed in advance for each threshold:
+
+| Barrier threshold | T0 settlement-request timeout | T2 readiness-report timeout |
+| ---: | ---: | ---: |
+| `q = 0.7` | 10 ms | 443 ms |
+| `q = 0.8` | 20 ms | 510 ms |
+| `q = 0.9` | 100 ms | 616 ms |
+
+The first-stage values are empirically chosen from the baseline report-wait means of 0.00, 0.78 and 65.01 ms; the second-stage values are the corresponding baseline readiness-wait means of 295.17, 339.49 and 410.59 ms multiplied by 1.5 and rounded up to integer milliseconds. **The timeouts apply separately at T0 and T2**, not as one overall EC-round deadline. They are not re-optimized for the failure scenario.
+
+```bash
+python run_bea_cbdc_table9_barrier_timeout.py
+```
+
+To run only one threshold:
+
+```bash
+python run_bea_cbdc_table9_barrier_timeout.py --q 0.9
+```
+
+Outputs in `table9_barrier_timeout/`:
+
+- `Table9_Barrier_Timeout.csv`: per-threshold summary including T0 and T2 timeout counts.
+- `Table9_Barrier_Timeout_Rounds_q0.7.csv`, `Table9_Barrier_Timeout_Rounds_q0.8.csv`, `Table9_Barrier_Timeout_Rounds_q0.9.csv`: per-round timing, participation and backlog statistics.
+- `Table9_Failure_Schedule.csv`: physical-time-referenced failure windows.
+
+### Execution and interpretation notes
+
+The two scripts require their **own matching engine files**, all four Python files must be in the same directory, and neither experiment changes the original Table 8 outputs. To test functionality without full-scale transaction generation:
+
+```bash
+python run_bea_cbdc_table9_barrier_no_timeout.py --smoke-test
+python run_bea_cbdc_table9_barrier_timeout.py --smoke-test
+```
+
+The smoke-test results are saved separately in `table9_barrier_no_timeout_smoke/` and `table9_barrier_timeout_smoke/`; they are not manuscript results. Both wrappers accept `--q` to select a threshold, `--reset` to rerun already completed thresholds, and `--progress-every` to adjust progress logging. Successful configurations are skipped on subsequent runs unless `--reset` is specified.
+
+These tests illustrate protocol behavior for **specified failure schedules** rather than estimating population-level performance across repeated seeds. Mean latency is computed only for completed transactions; unfinished request counts and barrier stalls must be considered separately. For cutoff-versus-barrier comparisons, use the same simulated-time observation horizon and distinguish physical-time throughput from throughput per variable-length EC round.
+
 ## Evaluation and reproducibility notes
 
 - For Tables 5, 6, and 7, `bea_cbdc_basic.py` writes the **same hard-coded NPZ filename** each time. Preserve or rename results before the next run.
@@ -253,7 +326,7 @@ The barrier wrapper skips completed threshold/seed pairs from its existing resul
 
 ## Outputs, privacy, and version control
 
-Large generated arrays and logs are excluded through `.gitignore`. The generated output folders `tables34_30runs/`, `tables34_50runs/`, and `barrier_30runs_fair/` are ignored so large simulation results and CSV outputs are not committed accidentally. No actual user account data or credentials are included; the model generates synthetic users and transactions.
+Large generated arrays and logs are excluded through `.gitignore`. The generated output folders `tables34_30runs/`, `tables34_50runs/`, `barrier_30runs_fair/`, `table9_barrier_no_timeout/`, and `table9_barrier_timeout/` (along with their smoke-test counterparts) are ignored so large simulation results and CSV outputs are not committed accidentally. No actual user account data or credentials are included; the model generates synthetic users and transactions.
 
 ## Citation and usage rights
 
