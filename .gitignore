@@ -14,3 +14,7 @@ tables34_30runs/
 tables34_50runs/
 barrier_30runs_fair/
 barrier_smoketest_fair/
+table9_barrier_no_timeout/
+table9_barrier_no_timeout_smoke/
+table9_barrier_timeout/
+table9_barrier_timeout_smoke/
