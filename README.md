@@ -19,8 +19,10 @@ The experiments investigate (i) cutoff-based settlement synchronization over var
 | `run_bea_cbdc_table9_barrier_no_timeout.py` | Single-run Table 9 comparison at q = 0.7, 0.8, 0.9, without timeouts. |
 | `bea_cbdc_basic_barrier_table9_timeout.py` | Table 9 barrier engine with separate T0 and T2 timeouts. |
 | `run_bea_cbdc_table9_barrier_timeout.py` | Single-run Table 9 comparison at q = 0.7, 0.8, 0.9, with timeouts. |
+| `bea_cbdc_table10_barrier.py` | Table 10 barrier engine supporting recovery-aware waiting during long AC failures and optional stage-specific timeouts. |
+| `run_bea_cbdc_table10.py` | Seven single-run Table 10 comparisons with a common long-failure schedule: cutoff, three no-timeout barriers, and three timed barriers. |
 
-**Reproduction principle.** Tables 5, 6, and 7 use the *same* cutoff-based source file, `bea_cbdc_basic.py`, with only the indicated experiment parameters changed. No separate HalfAC, HalfEC, or temporary-failure implementation is required. Use the stated settings before each run and restore the baseline settings afterward. The updated 50-run wrapper is used for Tables 3 and 4; the original 30-run wrapper remains available for the earlier three-configuration results. The separate barrier wrapper reproduces Table 8. The dedicated Table 9 engines and wrappers evaluate the two barrier variants under the temporary-AC-failure scenario; these do not replace the Table 8 engine.
+**Reproduction principle.** Tables 5, 6, and 7 use the *same* cutoff-based source file, `bea_cbdc_basic.py`, with only the indicated experiment parameters changed. No separate HalfAC, HalfEC, or temporary-failure implementation is required. Use the stated settings before each run and restore the baseline settings afterward. The updated 50-run wrapper is used for Tables 3 and 4; the original 30-run wrapper remains available for the earlier three-configuration results. The separate barrier wrapper reproduces Table 8. The dedicated Table 9 engines and wrappers evaluate the two barrier variants under the temporary-AC-failure scenario; these do not replace the Table 8 engine. The Table 10 wrapper and engine reuse the released Table 9 reference engine and analysis utilities and keep the long-failure scenario separate from Table 9.
 
 ## Requirements
 
@@ -314,6 +316,97 @@ The smoke-test results are saved separately in `table9_barrier_no_timeout_smoke/
 
 These tests illustrate protocol behavior for **specified failure schedules** rather than estimating population-level performance across repeated seeds. Mean latency is computed only for completed transactions; unfinished request counts and barrier stalls must be considered separately. For cutoff-versus-barrier comparisons, use the same simulated-time observation horizon and distinguish physical-time throughput from throughput per variable-length EC round.
 
+## Reproducing the long-duration AC failure comparison (Table 10)
+
+Table 10 evaluates **seven single-run configurations** under a common severe, long-duration AC failure schedule. The intent is to examine settlement progression, reporting waits and operational consequences when substantial numbers of ACs are temporarily unavailable. These runs are **scenario demonstrations (seed 42), not repeated-seed confidence-interval estimates**.
+
+### Required files and configuration
+
+Place these **four Python files in the same directory** (all are included in this repository):
+
+- `run_bea_cbdc_table10.py`: new Table 10 experiment runner.
+- `bea_cbdc_table10_barrier.py`: new recovery-aware Table 10 barrier engine.
+- `bea_cbdc_basic_barrier_table9_no_timeout.py`: unchanged Table 9 reference engine; used for the original cutoff processing and transaction helpers.
+- `run_bea_cbdc_table9_barrier_no_timeout.py`: unchanged Table 9 analysis helpers.
+
+The runner loads these dependencies directly. **The separate `bea_cbdc_basic_barrier_table9_timeout.py` file is not required by this Table 10 runner.** Existing Table 9 source files and results are not modified.
+
+The full-size Table 10 configuration is:
+
+| Parameter | Value | Interpretation |
+| --- | ---: | --- |
+| `N_AC` | `1000` | Total ACs |
+| `N_User` | `100_000_000` | Synthetic user accounts |
+| `N_Round` | `1000` | 1,000 reference time periods |
+| `Delta_R` | `1000` ms | One reference second per period |
+| `lambda_tx` | `100.0` | System-wide requests/ms |
+| `Flag_Burst` | `False` | No traffic burst |
+| `P_Fail_AC` | `0.5` | Exactly 500 ACs selected to fail once |
+| `R_Fail_Start` / `R_Fail_End` | `100` / `500` | Failure starts in reference seconds 100-500 |
+| `Min_Fail_Duration` / `Max_Fail_Duration` | `100` / `400` | Each failure lasts 100-400 seconds |
+| `seed` | `42` | Reproducible scenario |
+
+Every selected AC fails **once**, with its own randomly generated start and duration. The same deterministic failure schedule and synthetic transaction workload are regenerated for each configuration. Failure windows are tied to **absolute simulated physical time**, not to the varying EC round indices of the barriers. There is no assumption that all 500 selected ACs fail simultaneously.
+
+### Seven configurations
+
+| Mode (`--mode`) | Threshold | Stage 1 (T0) timeout | Stage 2 (T2) timeout |
+| --- | ---: | ---: | ---: |
+| `cutoff` | — | Reference time-based cutoff | Reference time-based cutoff |
+| `barrier` | `0.7` | None | None |
+| `barrier` | `0.8` | None | None |
+| `barrier` | `0.9` | None | None |
+| `timeout` | `0.7` | 10 ms | 443 ms |
+| `timeout` | `0.8` | 20 ms | 510 ms |
+| `timeout` | `0.9` | 100 ms | 616 ms |
+
+The time-based cutoff run uses the original cutoff simulation logic. The no-timeout barrier does **not** terminate immediately when a quorum becomes temporarily unavailable: it waits for AC recovery and subsequently arriving reports. If a pending stage does not finish within the shared observation horizon, the output distinguishes `BLOCKED_AT_HORIZON` from `OBSERVATION_END`; neither should be interpreted automatically as permanent deadlock. With timeouts, each reporting stage proceeds when its quorum is reached or its independent timeout expires, whichever is earlier. The six barrier variants use the same q thresholds and stage-specific timeout values as Table 9.
+
+### Running Table 10
+
+List the seven planned runs without simulating:
+
+```bash
+python3 run_bea_cbdc_table10.py --list
+```
+
+Full experiment, all seven runs **sequentially**:
+
+```bash
+python3 run_bea_cbdc_table10.py
+```
+
+Run a selected configuration:
+
+```bash
+python3 run_bea_cbdc_table10.py --mode cutoff
+python3 run_bea_cbdc_table10.py --mode barrier --q 0.9
+python3 run_bea_cbdc_table10.py --mode timeout --q 0.9
+```
+
+Functional smoke test (reduced-size scenario, **not** a manuscript result):
+
+```bash
+python3 run_bea_cbdc_table10.py --smoke-test
+```
+
+Options: `--mode all|cutoff|barrier|timeout` (default `all`), `--q 0.7|0.8|0.9` for the barrier modes, `--progress-every N`, and `--reset` to repeat selected runs. The runner saves each finished result immediately and skips completed/previously recorded terminal-status configurations on subsequent runs, unless `--reset` is specified.
+
+### Output files and interpretation
+
+The full experiment writes to `table10_long_failure/`; the smoke test writes to `table10_long_failure_smoke/`.
+
+- `Table10_All_7.csv`: the seven-configuration summary, including completion status, throughput, latency, backlog, unfinished transactions, and monetary deviation.
+- `Table10_Scenario.json`: parameters and a SHA-256 fingerprint of the shared failure schedule, used to detect scenario mismatches when resuming.
+- `Table10_Failure_Schedule.csv`: per-AC failure start/end times and durations.
+- `Table10_Concurrent_Failures.csv`: concurrent unavailable AC count for each reference second.
+- `Table10_Cutoff_Rounds.csv`: reference cutoff round metrics.
+- `Table10_barrier_Rounds_q0.7.csv`, `Table10_barrier_Rounds_q0.8.csv`, `Table10_barrier_Rounds_q0.9.csv`: no-timeout barrier round metrics.
+- `Table10_timeout_Rounds_q0.7.csv`, `Table10_timeout_Rounds_q0.8.csv`, `Table10_timeout_Rounds_q0.9.csv`: timed barrier round metrics.
+- `Table10_Cutoff_Console.log`: console log of the cutoff run, created inside the output directory.
+
+Do **not** treat a mean latency calculated over completed transactions as evidence that uncompleted requests experienced no delay. Interpret incomplete requests, quorum waits and censored settlement rounds together with measured throughput and backlog. The common physical-time observation window is important because barrier EC rounds are variable-length. The resulting values are simulation outcomes for the specified failure scenario, not universal performance guarantees.
+
 ## Evaluation and reproducibility notes
 
 - For Tables 5, 6, and 7, `bea_cbdc_basic.py` writes the **same hard-coded NPZ filename** each time. Preserve or rename results before the next run.
@@ -326,7 +419,7 @@ These tests illustrate protocol behavior for **specified failure schedules** rat
 
 ## Outputs, privacy, and version control
 
-Large generated arrays and logs are excluded through `.gitignore`. The generated output folders `tables34_30runs/`, `tables34_50runs/`, `barrier_30runs_fair/`, `table9_barrier_no_timeout/`, and `table9_barrier_timeout/` (along with their smoke-test counterparts) are ignored so large simulation results and CSV outputs are not committed accidentally. No actual user account data or credentials are included; the model generates synthetic users and transactions.
+Large generated arrays and logs are excluded through `.gitignore`. The generated output folders `tables34_30runs/`, `tables34_50runs/`, `barrier_30runs_fair/`, `table9_barrier_no_timeout/`, `table9_barrier_timeout/`, and `table10_long_failure/` (along with their applicable smoke-test counterparts) are ignored so large simulation results and CSV outputs are not committed accidentally. No actual user account data or credentials are included; the model generates synthetic users and transactions.
 
 ## Citation and usage rights
 
