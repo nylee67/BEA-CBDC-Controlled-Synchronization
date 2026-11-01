@@ -253,7 +253,7 @@ The barrier wrapper skips completed threshold/seed pairs from its existing resul
 
 ## Outputs, privacy, and version control
 
-Large generated arrays and logs are excluded through `.gitignore`. The existing output folders `tables34_30runs/` and `barrier_30runs_fair/` are ignored; **add `tables34_50runs/` to `.gitignore`** before staging new results so that the additional CSV outputs are also excluded. No actual user account data or credentials are included; the model generates synthetic users and transactions.
+Large generated arrays and logs are excluded through `.gitignore`. The generated output folders `tables34_30runs/`, `tables34_50runs/`, and `barrier_30runs_fair/` are ignored so large simulation results and CSV outputs are not committed accidentally. No actual user account data or credentials are included; the model generates synthetic users and transactions.
 
 ## Citation and usage rights
 
