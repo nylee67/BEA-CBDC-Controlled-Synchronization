@@ -389,7 +389,7 @@ Interpret completed-request mean latency together with unfinished requests, back
 
 ## Outputs, privacy, and version control
 
-Large generated arrays (`*.npz`, `*.npy`) and the legacy output directories are excluded through `.gitignore`. The Table 9 runners write into `table9_t0_280_retry_7runs*/` and `table9_t0_280_retry_barrier_6runs*/`; the Table 10 runner writes into `table10_t0_280_retry_*/`. Ensure these generated directories are excluded before committing, since the current `.gitignore` may not yet cover them. Do not commit generated result CSVs, logs or other large outputs. The checked-in `Table9_T0_280_Retry_Failure_Schedule_Input.csv` is an intentional, required small input file, not a generated result. No actual user account data or credentials are included; the model generates synthetic users and transactions.
+Large generated arrays (`*.npz`, `*.npy`) and the legacy output directories are excluded through `.gitignore`. The Table 9 runners write into `table9_t0_280_retry_7runs*/` and `table9_t0_280_retry_barrier_6runs*/`; the Table 10 runner writes into `table10_t0_280_retry_*/`. These generated directories are excluded by `.gitignore`; do not commit generated results or logs. Do not commit generated result CSVs, logs or other large outputs. The checked-in `Table9_T0_280_Retry_Failure_Schedule_Input.csv` is an intentional, required small input file, not a generated result. No actual user account data or credentials are included; the model generates synthetic users and transactions.
 
 ## Citation and usage rights
 
